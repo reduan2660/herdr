@@ -1,5 +1,5 @@
 use crate::config::{
-    AgentSidebarToken, AgentsSidebarConfig, SidebarTokenStyle, SpaceSidebarToken,
+    AgentDefaultName, AgentSidebarToken, AgentsSidebarConfig, SidebarTokenStyle, SpaceSidebarToken,
     SpacesSidebarConfig,
 };
 
@@ -55,6 +55,8 @@ impl ResolvedToken {
 pub(crate) struct AgentTokenContext<'a> {
     pub(crate) machine: Option<&'a str>,
     pub(crate) workspace: &'a str,
+    /// The user's custom name for this agent, if any.
+    pub(crate) custom_name: Option<&'a str>,
     pub(crate) tab: Option<&'a str>,
     pub(crate) pane: Option<&'a str>,
     pub(crate) agent_label: Option<&'a str>,
@@ -62,6 +64,21 @@ pub(crate) struct AgentTokenContext<'a> {
     pub(crate) terminal_title_stripped: Option<&'a str>,
     pub(crate) canonical_agent: Option<crate::detect::Agent>,
     pub(crate) tokens: &'a std::collections::HashMap<String, String>,
+}
+
+/// Resolve the `name` token: a custom name wins, then the session title when
+/// configured, then the space name.
+pub(crate) fn agent_display_name<'a>(
+    default_name: AgentDefaultName,
+    context: &AgentTokenContext<'a>,
+) -> &'a str {
+    let non_empty = |value: Option<&'a str>| value.filter(|value| !value.trim().is_empty());
+    non_empty(context.custom_name)
+        .or_else(|| match default_name {
+            AgentDefaultName::Session => non_empty(context.terminal_title_stripped),
+            AgentDefaultName::Space => None,
+        })
+        .unwrap_or(context.workspace)
 }
 
 pub(crate) fn agent_rows(
@@ -88,6 +105,9 @@ pub(crate) fn agent_rows(
                         AgentSidebarToken::Workspace => {
                             Some(ResolvedTokenKind::Workspace(context.workspace.to_string()))
                         }
+                        AgentSidebarToken::Name => Some(ResolvedTokenKind::Workspace(
+                            agent_display_name(config.default_name, &context).to_string(),
+                        )),
                         AgentSidebarToken::Tab => context
                             .tab
                             .map(|value| ResolvedTokenKind::Tab(value.to_string())),
@@ -194,6 +214,7 @@ mod tests {
 
     struct Entry {
         workspace: String,
+        custom_name: Option<String>,
         tab: Option<String>,
         pane: Option<String>,
         agent_label: Option<String>,
@@ -206,6 +227,7 @@ mod tests {
     fn entry() -> Entry {
         Entry {
             workspace: "repo".into(),
+            custom_name: None,
             tab: None,
             pane: None,
             agent_label: Some("pi".into()),
@@ -220,6 +242,7 @@ mod tests {
         AgentTokenContext {
             machine: None,
             workspace: &entry.workspace,
+            custom_name: entry.custom_name.as_deref(),
             tab: entry.tab.as_deref(),
             pane: entry.pane.as_deref(),
             agent_label: entry.agent_label.as_deref(),
@@ -397,6 +420,54 @@ rows = [[{ token = "$load", rules = [{ lt = 50, hide = true }] }], ["workspace"]
             let rows = agent_rows(&config, context(&entry), "working");
             assert_eq!(rows[0][0].kind, ResolvedTokenKind::Agent("pi".into()));
         }
+    }
+
+    #[test]
+    fn name_token_prefers_custom_name_then_configured_default() {
+        let name_of = |entry: &Entry, default_name| {
+            let config = AgentsSidebarConfig {
+                rows: vec![vec![AgentSidebarToken::Name]],
+                default_name,
+                ..Default::default()
+            };
+            agent_rows(&config, context(entry), "idle")
+        };
+        let workspace = |value: &str| {
+            vec![vec![ResolvedToken::unstyled(ResolvedTokenKind::Workspace(
+                value.into(),
+            ))]]
+        };
+
+        let mut entry = entry();
+        assert_eq!(name_of(&entry, AgentDefaultName::Space), workspace("repo"));
+        assert_eq!(
+            name_of(&entry, AgentDefaultName::Session),
+            workspace("repo")
+        );
+
+        entry.terminal_title_stripped = Some("fix login".into());
+        assert_eq!(name_of(&entry, AgentDefaultName::Space), workspace("repo"));
+        assert_eq!(
+            name_of(&entry, AgentDefaultName::Session),
+            workspace("fix login")
+        );
+
+        entry.terminal_title_stripped = Some("  ".into());
+        assert_eq!(
+            name_of(&entry, AgentDefaultName::Session),
+            workspace("repo")
+        );
+
+        entry.custom_name = Some("reviewer".into());
+        entry.terminal_title_stripped = Some("fix login".into());
+        assert_eq!(
+            name_of(&entry, AgentDefaultName::Space),
+            workspace("reviewer")
+        );
+        assert_eq!(
+            name_of(&entry, AgentDefaultName::Session),
+            workspace("reviewer")
+        );
     }
 
     #[test]

@@ -366,8 +366,9 @@ The expanded desktop sidebar renders each inner array in `rows` as one line. The
 ```toml
 [ui.sidebar.agents]
 row_gap = 0
+default_name = "space"
 rows = [
-  ["state_icon", "machine", "workspace", "tab"],
+  ["state_icon", "machine", "name", "tab"],
   ["agent"],
 ]
 
@@ -384,6 +385,7 @@ Agent rows accept these built-in tokens:
 - `state_icon` — colored icon for the agent's semantic state.
 - `state_text` — `idle`, `working`, `blocked`, `done`, or `unknown`, including a reported display label when present.
 - `machine` — machine label when the client has multiple machines; omitted for a single local machine.
+- `name` — the agent's name. A custom name set with `Rename agent` wins; otherwise `default_name` decides.
 - `workspace` — workspace name.
 - `tab` — tab name when available.
 - `pane` — pane name when available.
@@ -433,6 +435,10 @@ The first matching rule wins. Its specified style fields override the occurrence
 `gt` and `lt` take finite numeric thresholds and compare strictly greater or less, not equal. Values must parse completely as finite numbers; decimal and exponent forms work, but whitespace, units, `NaN`, and infinity do not match. `ignore_case` is not accepted on numeric rules. Comparisons use floating-point numbers, not exact large-integer arithmetic.
 
 Rules work with text-valued built-ins and custom `$name` tokens in Agent rows, `rows_by_agent` overrides, and Space rows. Custom tokens match their reported value: `$load` reporting `"90"` selects red and bold above, `"60"` selects yellow, and `"90%"` keeps white. Unreported tokens still disappear. `state_icon` and composite `git_status` accept fixed styles only, not rules. Unknown conditions and malformed rules are rejected when loading config; regex, fuzzy matching, and scripts are not supported.
+
+`default_name` controls what the `name` token shows for an agent without a custom name. `"space"` (the default) shows the workspace name. `"session"` shows the agent's session title, read from its terminal title with the leading activity or spinner glyph removed, such as the conversation name Claude Code displays; it falls back to the workspace name while the agent has not set a title.
+
+Right-click an agent row and choose `Rename agent` to give it a custom name, or `Clear agent name` to return to `default_name`. Saving the prefilled default unchanged keeps the name dynamic. A custom agent name is stored as the agent pane's name, so it also appears wherever the pane name does, and `herdr pane rename` sets it from scripts.
 
 `row_gap` controls the blank terminal rows between entries, independently for the Agent and Space panels. It defaults to `0`, which packs entries together; set it to `1` to restore the previous spacing. It does not add spacing between the content lines declared in `rows`. Consecutive indented worktree children remain packed as one Space group.
 

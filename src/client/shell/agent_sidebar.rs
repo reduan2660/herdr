@@ -245,6 +245,44 @@ pub(super) fn agent_rows(
         .collect()
 }
 
+/// The agent's current display name and whether it is a custom name.
+pub(super) fn agent_display_name(
+    snapshot: &ClientShellSnapshot,
+    pane_id: &str,
+    config: &ClientShellConfig,
+) -> Option<(String, bool)> {
+    let agent = snapshot
+        .agents
+        .iter()
+        .find(|agent| agent.pane_id == pane_id)?;
+    let workspace = snapshot
+        .workspaces
+        .iter()
+        .find(|workspace| workspace.workspace_id == agent.workspace_id)?;
+    let custom_name = snapshot
+        .panes
+        .iter()
+        .find(|pane| pane.pane_id == pane_id)
+        .and_then(|pane| pane.label.as_deref());
+    let tokens = HashMap::new();
+    let name = crate::ui::agent_display_name(
+        config.agents.default_name,
+        &crate::ui::AgentTokenContext {
+            machine: None,
+            workspace: &workspace.label,
+            custom_name,
+            tab: None,
+            pane: None,
+            agent_label: None,
+            terminal_title: None,
+            terminal_title_stripped: agent.terminal_title_stripped.as_deref(),
+            canonical_agent: None,
+            tokens: &tokens,
+        },
+    );
+    Some((name.to_owned(), custom_name.is_some()))
+}
+
 pub(super) fn agent_row(
     snapshot: &ClientShellSnapshot,
     pane_id: &str,
@@ -297,6 +335,7 @@ pub(super) fn agent_row(
         crate::ui::AgentTokenContext {
             machine,
             workspace: &workspace.label,
+            custom_name: pane.and_then(|pane| pane.label.as_deref()),
             tab: tab_label,
             pane: agent
                 .title

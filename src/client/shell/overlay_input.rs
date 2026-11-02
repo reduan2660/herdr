@@ -993,6 +993,22 @@ impl ClientShellState {
                     label: Some(trimmed.to_owned()),
                 },
             )),
+            ClientRenameTarget::Agent {
+                pane_id,
+                has_custom_name,
+                original_name,
+            } => {
+                // An untouched default name stays dynamic instead of being
+                // frozen as a custom name; an empty name clears the custom one.
+                let unchanged_default = !has_custom_name && trimmed == original_name;
+                let nothing_to_clear = !has_custom_name && trimmed.is_empty();
+                (!(unchanged_default || nothing_to_clear)).then(|| {
+                    crate::api::schema::Method::PaneRename(crate::api::schema::PaneRenameParams {
+                        pane_id,
+                        label: (!trimmed.is_empty()).then(|| trimmed.to_owned()),
+                    })
+                })
+            }
         };
         if let Some(method) = method {
             self.push_endpoint_method(method, outcome);

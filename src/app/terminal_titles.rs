@@ -19,6 +19,10 @@ impl App {
             .any(|token| match token.parts().0 {
                 crate::config::AgentSidebarToken::TerminalTitle => changes.raw_changed,
                 crate::config::AgentSidebarToken::TerminalTitleStripped => changes.stripped_changed,
+                crate::config::AgentSidebarToken::Name => {
+                    config.default_name == crate::config::AgentDefaultName::Session
+                        && changes.stripped_changed
+                }
                 _ => false,
             })
     }
@@ -231,6 +235,32 @@ mod tests {
             vec![vec![crate::config::AgentSidebarToken::TerminalTitle]],
         );
         assert!(app.terminal_title_sidebar_changed(&spinner_only));
+    }
+
+    #[test]
+    fn name_token_redraws_for_title_changes_only_when_it_follows_the_session() {
+        let event_hub = crate::api::EventHub::default();
+        let (_api_tx, api_rx) = tokio::sync::mpsc::unbounded_channel();
+        let mut app = App::new(
+            &Config::default(),
+            crate::app::AppPolicy::TEST,
+            None,
+            api_rx,
+            event_hub,
+        );
+        app.state.sidebar_agents.rows = vec![vec![crate::config::AgentSidebarToken::Name]];
+        let stripped = TerminalTitleChanges {
+            raw_changed: true,
+            stripped_changed: true,
+        };
+
+        assert!(!app.terminal_title_sidebar_changed(&stripped));
+        app.state.sidebar_agents.default_name = crate::config::AgentDefaultName::Session;
+        assert!(app.terminal_title_sidebar_changed(&stripped));
+        assert!(!app.terminal_title_sidebar_changed(&TerminalTitleChanges {
+            raw_changed: true,
+            ..TerminalTitleChanges::default()
+        }));
     }
 
     fn pane_updated_events(event_hub: &crate::api::EventHub) -> usize {

@@ -110,6 +110,9 @@ pub enum AgentSidebarToken {
     StateText,
     Machine,
     Workspace,
+    /// The agent's display name: a custom name, then the session title when
+    /// `default_name = "session"`, then the space name.
+    Name,
     Tab,
     Pane,
     Agent,
@@ -274,6 +277,7 @@ fn agent_token_name(token: &AgentSidebarToken) -> String {
         AgentSidebarToken::StateText => "state_text".into(),
         AgentSidebarToken::Machine => "machine".into(),
         AgentSidebarToken::Workspace => "workspace".into(),
+        AgentSidebarToken::Name => "name".into(),
         AgentSidebarToken::Tab => "tab".into(),
         AgentSidebarToken::Pane => "pane".into(),
         AgentSidebarToken::Agent => "agent".into(),
@@ -333,6 +337,7 @@ impl<'de> Deserialize<'de> for AgentSidebarToken {
                 ("state_text", Self::StateText),
                 ("machine", Self::Machine),
                 ("workspace", Self::Workspace),
+                ("name", Self::Name),
                 ("tab", Self::Tab),
                 ("pane", Self::Pane),
                 ("agent", Self::Agent),
@@ -427,6 +432,20 @@ pub struct AgentsSidebarConfig {
     #[serde(default, deserialize_with = "deserialize_rows_by_agent")]
     pub rows_by_agent: BTreeMap<String, AgentSidebarRows>,
     pub row_gap: u16,
+    pub default_name: AgentDefaultName,
+}
+
+/// What the `name` agent token shows when the agent has no custom name.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AgentDefaultName {
+    /// The name of the space the agent runs in.
+    #[default]
+    #[serde(alias = "workspace")]
+    Space,
+    /// The agent's session title (its terminal title without status glyphs),
+    /// falling back to the space name when the agent has not set one.
+    Session,
 }
 
 impl AgentsSidebarConfig {
@@ -444,13 +463,14 @@ impl Default for AgentsSidebarConfig {
                 vec![
                     AgentSidebarToken::StateIcon,
                     AgentSidebarToken::Machine,
-                    AgentSidebarToken::Workspace,
+                    AgentSidebarToken::Name,
                     AgentSidebarToken::Tab,
                 ],
                 vec![AgentSidebarToken::Agent],
             ],
             rows_by_agent: BTreeMap::new(),
             row_gap: DEFAULT_SIDEBAR_ROW_GAP,
+            default_name: AgentDefaultName::Space,
         }
     }
 }
@@ -495,13 +515,14 @@ mod tests {
                 vec![
                     AgentSidebarToken::StateIcon,
                     AgentSidebarToken::Machine,
-                    AgentSidebarToken::Workspace,
+                    AgentSidebarToken::Name,
                     AgentSidebarToken::Tab,
                 ],
                 vec![AgentSidebarToken::Agent],
             ]
         );
         assert!(config.agents.rows_by_agent.is_empty());
+        assert_eq!(config.agents.default_name, AgentDefaultName::Space);
         assert_eq!(config.agents.row_gap, 0);
         assert_eq!(
             config.spaces.rows,

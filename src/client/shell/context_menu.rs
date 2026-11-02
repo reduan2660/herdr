@@ -79,6 +79,15 @@ impl ClientContextMenuOverlay {
                 ]);
                 items
             }
+            ClientContextMenuTarget::Agent {
+                has_custom_name, ..
+            } => {
+                let mut items = vec![item("Rename agent", Action::RenameAgent)];
+                if *has_custom_name {
+                    items.push(item("Clear agent name", Action::ClearAgentName));
+                }
+                items
+            }
         }
     }
 }
@@ -167,6 +176,48 @@ impl ClientShellState {
         }));
     }
 
+    pub(super) fn open_agent_context_menu(&mut self, pane_id: String, x: u16, y: u16) {
+        let Some(snapshot) = self.snapshot.as_deref() else {
+            return;
+        };
+        if !snapshot.agents.iter().any(|agent| agent.pane_id == pane_id) {
+            return;
+        }
+        let has_custom_name = snapshot
+            .panes
+            .iter()
+            .any(|pane| pane.pane_id == pane_id && pane.label.is_some());
+        self.overlay = Some(ClientShellOverlay::ContextMenu(ClientContextMenuOverlay {
+            target: ClientContextMenuTarget::Agent {
+                pane_id,
+                has_custom_name,
+            },
+            x,
+            y,
+            highlighted: 0,
+        }));
+    }
+
+    pub(super) fn open_rename_agent_overlay(&mut self, pane_id: String) {
+        let Some(snapshot) = self.snapshot.as_deref() else {
+            return;
+        };
+        let Some((name, has_custom_name)) =
+            super::agent_sidebar::agent_display_name(snapshot, &pane_id, &self.config)
+        else {
+            return;
+        };
+        self.overlay = Some(ClientShellOverlay::Rename(ClientRenameOverlay {
+            title: "rename agent",
+            input: TextEditor::new(&name, !has_custom_name),
+            target: ClientRenameTarget::Agent {
+                pane_id,
+                has_custom_name,
+                original_name: name,
+            },
+        }));
+    }
+
     pub(super) fn move_context_menu_selection(&mut self, delta: isize) {
         let Some(ClientShellOverlay::ContextMenu(menu)) = self.overlay.as_mut() else {
             return;
@@ -215,6 +266,17 @@ impl ClientShellState {
                 action,
                 outcome,
             ),
+            ClientContextMenuTarget::Agent { pane_id, .. } => match action {
+                ClientContextMenuAction::RenameAgent => self.open_rename_agent_overlay(pane_id),
+                ClientContextMenuAction::ClearAgentName => self.push_endpoint_method(
+                    crate::api::schema::Method::PaneRename(crate::api::schema::PaneRenameParams {
+                        pane_id,
+                        label: None,
+                    }),
+                    outcome,
+                ),
+                _ => {}
+            },
         }
         outcome.repaint = true;
     }

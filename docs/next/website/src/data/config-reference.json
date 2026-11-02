@@ -1061,6 +1061,16 @@
           ]
         },
         {
+          "key": "ui.sidebar.agents.default_name",
+          "type": "enum",
+          "default": "\"space\"",
+          "description": "What the name agent token shows when an agent has no custom name: the space name, or the agent's session title from its stripped terminal title, falling back to the space name.",
+          "values": [
+            "space",
+            "session"
+          ]
+        },
+        {
           "key": "ui.sidebar.agents.row_gap",
           "type": "integer",
           "default": "0",
@@ -1069,7 +1079,7 @@
         {
           "key": "ui.sidebar.agents.rows",
           "type": "list of token rows",
-          "default": "[[\"state_icon\", \"machine\", \"workspace\", \"tab\"], [\"agent\"]]",
+          "default": "[[\"state_icon\", \"machine\", \"name\", \"tab\"], [\"agent\"]]",
           "description": "Default expanded Agent sidebar layout. Entries may be token strings or inline { token, fg, bold, dim, rules } style tables. Text-valued built-ins and $name metadata tokens accept up to 16 ordered rules using equals, contains, starts_with, gt, or lt; the first match overrides specified styles. Text conditions optionally accept ignore_case for ASCII matching; numeric conditions require full finite numbers. state_icon accepts fixed styles only. At most 16 rows and 16 tokens per row."
         },
         {

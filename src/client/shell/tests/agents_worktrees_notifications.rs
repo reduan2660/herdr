@@ -1682,3 +1682,142 @@ fn semantic_notifications_use_client_policy_and_stable_navigation_targets() {
     assert!(state.visible_notification.is_none());
     assert_eq!(state.pending_notifications.len(), 1);
 }
+
+fn renamable_agent_snapshot(
+    label: Option<&str>,
+    session_title: Option<&str>,
+) -> ClientShellSnapshot {
+    let mut projected = snapshot();
+    projected.panes[0].label = label.map(str::to_owned);
+    projected.agents = vec![ClientShellAgent {
+        pane_id: "pane_1".into(),
+        workspace_id: "ws_1".into(),
+        tab_id: "tab_1".into(),
+        name: None,
+        display_agent: None,
+        agent: Some("claude".into()),
+        title: None,
+        terminal_title: session_title.map(str::to_owned),
+        terminal_title_stripped: session_title.map(str::to_owned),
+        agent_status: AgentStatus::Idle,
+        state_change_seq: 1,
+        state_labels: Vec::new(),
+        tokens: Vec::new(),
+        focused: true,
+    }];
+    projected
+}
+
+fn agent_rename_requests(input: &ClientShellInput) -> Vec<Option<String>> {
+    input
+        .actions
+        .iter()
+        .filter_map(|action| match action {
+            ClientShellAction::Endpoint { request, .. } => match &request.method {
+                crate::api::schema::Method::PaneRename(params) if params.pane_id == "pane_1" => {
+                    Some(params.label.clone())
+                }
+                _ => None,
+            },
+            _ => None,
+        })
+        .collect()
+}
+
+fn agent_row_text(state: &mut ClientShellState) -> String {
+    let frame = state.compose(106, 30).expect("agent sidebar frame");
+    let row = state.hits.agents.first().expect("agent row hit").0;
+    (row.x..row.right())
+        .map(|x| {
+            frame.cells[row.y as usize * frame.width as usize + x as usize]
+                .symbol
+                .as_str()
+        })
+        .collect()
+}
+
+#[test]
+fn agent_rows_show_custom_name_then_configured_default_name() {
+    let mut config = Config::default();
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&config));
+    state.set_pane_surface(surface());
+
+    state.set_snapshot(Box::new(renamable_agent_snapshot(None, Some("fix login"))));
+    let text = agent_row_text(&mut state);
+    assert!(text.contains("client-shell"), "row: {text}");
+    assert!(!text.contains("fix login"), "row: {text}");
+
+    config.ui.sidebar.agents.default_name = crate::config::AgentDefaultName::Session;
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&config));
+    state.set_pane_surface(surface());
+    state.set_snapshot(Box::new(renamable_agent_snapshot(None, Some("fix login"))));
+    let text = agent_row_text(&mut state);
+    assert!(text.contains("fix login"), "row: {text}");
+    assert!(!text.contains("client-shell"), "row: {text}");
+
+    let mut renamed = renamable_agent_snapshot(Some("reviewer"), Some("fix login"));
+    renamed.revision += 1;
+    state.set_snapshot(Box::new(renamed));
+    let text = agent_row_text(&mut state);
+    assert!(text.contains("reviewer"), "row: {text}");
+    assert!(!text.contains("fix login"), "row: {text}");
+}
+
+#[test]
+fn right_clicking_an_agent_row_renames_and_clears_its_name() {
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
+    state.set_pane_surface(surface());
+    state.set_snapshot(Box::new(renamable_agent_snapshot(None, None)));
+    state.compose(106, 30).expect("agent sidebar frame");
+    let row = state.hits.agents.first().expect("agent row hit").0;
+
+    state.handle_raw_events(vec![RawInputEvent::Mouse(crossterm::event::MouseEvent {
+        kind: MouseEventKind::Down(MouseButton::Right),
+        column: row.x,
+        row: row.y,
+        modifiers: KeyModifiers::empty(),
+    })]);
+    let Some(ClientShellOverlay::ContextMenu(menu)) = state.overlay.as_ref() else {
+        panic!("agent row right-click should open the agent context menu");
+    };
+    let labels = menu
+        .items()
+        .iter()
+        .map(|item| item.label)
+        .collect::<Vec<_>>();
+    assert_eq!(labels, ["Rename agent"]);
+
+    // Saving the prefilled default keeps the name dynamic.
+    state.activate_context_menu_item(0, &mut ClientShellInput::default());
+    assert!(matches!(state.overlay.as_ref(),
+        Some(ClientShellOverlay::Rename(rename))
+            if rename.title == "rename agent" && rename.input.as_str() == "client-shell"));
+    let unchanged = state.handle_input_bytes(b"\r");
+    assert!(agent_rename_requests(&unchanged).is_empty());
+
+    // Typing replaces the prefilled default.
+    state.open_agent_context_menu("pane_1".into(), 0, 0);
+    state.activate_context_menu_item(0, &mut ClientShellInput::default());
+    let renamed = state.handle_input_bytes(b"fix login\r");
+    assert_eq!(
+        agent_rename_requests(&renamed),
+        [Some("fix login".to_owned())]
+    );
+
+    let mut named = renamable_agent_snapshot(Some("fix login"), None);
+    named.revision += 1;
+    state.set_snapshot(Box::new(named));
+    state.open_agent_context_menu("pane_1".into(), 0, 0);
+    let Some(ClientShellOverlay::ContextMenu(menu)) = state.overlay.as_ref() else {
+        panic!("agent context menu");
+    };
+    let labels = menu
+        .items()
+        .iter()
+        .map(|item| item.label)
+        .collect::<Vec<_>>();
+    assert_eq!(labels, ["Rename agent", "Clear agent name"]);
+    let mut clear = ClientShellInput::default();
+    state.activate_context_menu_item(1, &mut clear);
+    assert_eq!(agent_rename_requests(&clear), [None]);
+}

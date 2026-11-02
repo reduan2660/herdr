@@ -315,6 +315,12 @@ pub(super) enum ClientRenameTarget {
     Pane {
         pane_id: String,
     },
+    /// Agent names are stored as the agent pane's label.
+    Agent {
+        pane_id: String,
+        has_custom_name: bool,
+        original_name: String,
+    },
 }
 
 #[derive(Debug)]
@@ -519,6 +525,8 @@ pub(super) enum ClientContextMenuAction {
     NewTab,
     RenamePane,
     ClearPaneName,
+    RenameAgent,
+    ClearAgentName,
     SwapWithFocusedPane,
     SplitRight,
     SplitDown,
@@ -547,6 +555,10 @@ pub(super) enum ClientContextMenuTarget {
         source_pane_id: Option<String>,
         has_manual_label: bool,
         right_click_passthrough: bool,
+    },
+    Agent {
+        pane_id: String,
+        has_custom_name: bool,
     },
 }
 

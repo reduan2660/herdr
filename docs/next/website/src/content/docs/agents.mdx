@@ -126,7 +126,9 @@ This is the main Herdr workflow: start several agents, let them work in parallel
 
 ## Custom agent labels
 
-You can rename an agent target for display:
+To change the name an agent row shows in the sidebar, right-click the row and choose `Rename agent`; `Clear agent name` restores the default. By default rows are named after their space. Set `default_name = "session"` under `[ui.sidebar.agents]` to name rows after each agent's session title instead when the agent sets one. See [Sidebar row layouts](/docs/configuration/#sidebar-row-layouts).
+
+You can also give an agent target a scriptable identifier:
 
 ```bash
 herdr agent rename w1:p1 reviewer
